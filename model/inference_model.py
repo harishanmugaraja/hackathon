@@ -101,7 +101,7 @@ class Tower(nn.Module):
 
 
 class MultiTowerModel(nn.Module):
-    def __init__(self, config: ModelConfig):
+    def __init__(self, config: ModelConfig, tower_config: list):
         super().__init__()
 
         layer_types = [
@@ -116,15 +116,20 @@ class MultiTowerModel(nn.Module):
         )
         self.output_proj = nn.Linear(config.hidden_size, 1)
 
+        self.tower_config = tower_config
+
     def forward(self, x: torch.Tensor, state):
         results = [
-            tower(x, tower_state)
-            for tower_state, tower in zip(state, self.towers, strict=True)
+            self.towers[tower_idx](x, state[state_idx])
+            for state_idx, tower_idx in enumerate(self.tower_config)
         ]
         xs, new_state = zip(*results, strict=True)
 
         xs = [self.output_proj(x) for x in xs]
-        return torch.concat(xs, dim=1), list(new_state)
+        ys = [torch.zeros_like(xs[0]) for _ in range(4)]
+        for idx, tower_idx in enumerate(self.tower_config):
+            ys[tower_idx] = xs[idx]
+        return torch.concat(ys, dim=1), list(new_state)
 
     def init_state(self, batch_size, device):
-        return [tower.init_state(batch_size, device) for tower in self.towers]
+        return [self.towers[tower_idx].init_state(batch_size, device) for tower_idx in self.tower_config]
