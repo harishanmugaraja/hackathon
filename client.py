@@ -12,8 +12,6 @@ from typing import Dict, List, Optional, Callable, Any
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 
-from constants import SYMBOL_ALLOWLIST
-
 from protocol import (
     ProtocolHandler,
     SocketReader,
@@ -161,20 +159,20 @@ class BaseInferenceClient(ABC):
         for unique_id, symbol, features in zip(
             request.unique_ids, request.symbols, request.features
         ):
-            allowed_symbols = [f"SYM_{num:03d}" for num in [0, 19, 10, 8, 3, 17]]
-            if symbol in allowed_symbols:
-                pending = PendingRequest(
-                        unique_id=unique_id,
-                        symbol=symbol,
-                        features=features,
-                        received_time=time.time(),
-                    )
+            # allowed_symbols = [f"SYM_{num:03d}" for num in [0, 19, 10, 8, 3, 17]]
+            # if symbol in allowed_symbols:
+            pending = PendingRequest(
+                    unique_id=unique_id,
+                    symbol=symbol,
+                    features=features,
+                    received_time=time.time(),
+                )
 
-                with self.queue_lock:
-                    try:
-                        self.request_queues[symbol].put_nowait(pending)
-                    except queue.Full:
-                        print(f"Queue full for symbol {symbol}, dropping request")
+            with self.queue_lock:
+                try:
+                    self.request_queues[symbol].put_nowait(pending)
+                except queue.Full:
+                    print(f"Queue full for symbol {symbol}, dropping request")
 
 
     def _handle_score(self, score: ScoreUpdate):

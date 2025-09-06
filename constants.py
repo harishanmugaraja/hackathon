@@ -1,1 +1,1 @@
-SYMBOL_ALLOWLIST = {f"SYM_{num:03d}" for num in [0, 19, 10, 8, 3, 17, 15, 2, 5]}
+SYMBOL_ALLOWLIST = {f"SYM_{num:03d}" for num in [0, 19, 10, 8, 3, 17, 15]}

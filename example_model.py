@@ -21,12 +21,11 @@ from huggingface_hub import hf_hub_download
 
 from client import BaseInferenceClient, PendingRequest, InferenceResponse
 from model.inference_model import MultiTowerModel, ModelConfig
-from constants import SYMBOL_ALLOWLIST
 
 torch.set_float32_matmul_precision('high')
 compile = True
 dynamic = False
-# compile_mode = "max-autotune-no-cudagraphs"
+compile_mode = "reduce-overhead"
 compile_mode = None
 
 def get_default_device() -> torch.device:
@@ -81,7 +80,10 @@ class NnInferenceClient(BaseInferenceClient):
             fullgraph=True,
         )
 
-        self.symbs = SYMBOL_ALLOWLIST
+        self.symbs = [f"SYM_{num:03d}"
+            for num in range(self.num_symbols)
+        ]
+
 
         self.state = self.model.init_state(len(self.symbs), device=self.device)
 
