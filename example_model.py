@@ -26,8 +26,7 @@ from constants import SYMBOL_ALLOWLIST
 torch.set_float32_matmul_precision('high')
 compile = True
 dynamic = False
-# compile_mode = "max-autotune-no-cudagraphs"
-compile_mode = None
+compile_mode = "reduce-overhead"
 
 def get_default_device() -> torch.device:
     if torch.cuda.is_available():
@@ -84,7 +83,9 @@ class NnInferenceClient(BaseInferenceClient):
             fullgraph=True,
         )
 
-        self.symbs = SYMBOL_ALLOWLIST
+        self.symbs = [f"SYM_{num:03d}"
+            for num in range(self.num_symbols)
+        ]
 
         self.state = self.model.init_state(len(self.symbs), device=self.device)
 
