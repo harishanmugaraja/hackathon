@@ -155,9 +155,9 @@ class EdgeLordModel(nn.Module):
     def forward(self, x: torch.Tensor, state):
         x, state = self.inner(x, state)
         x = torch.cat(x, axis=-1)
-        o = self.inner.output_proj(x.reshape((len(x), len(self.inner.config), -1)))
+        o = self.inner.output_proj(x.reshape((x.size(0), len(self.inner.config.good_towers), -1)))
         a = self.lin(x)
-        a[:, self.inner.config] = o
+        a[:, self.inner.config.good_towers] = o[..., 0]
         return a, state
 
     def init_state(self, batch_size, device):
