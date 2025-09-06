@@ -51,7 +51,8 @@ class NnInferenceClient(BaseInferenceClient):
             num_heads=8,
             num_features=79,
         )
-        self.model = MultiTowerModel(config).to(self.device)
+        tower_config = [1, 2]
+        self.model = MultiTowerModel(config, tower_config).to(self.device)
 
         nparams = sum(p.numel() for p in self.model.parameters())
         print(f"{nparams = }")
