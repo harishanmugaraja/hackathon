@@ -159,6 +159,9 @@ class BaseInferenceClient(ABC):
         for unique_id, symbol, features in zip(
             request.unique_ids, request.symbols, request.features
         ):
+            allowed_symbols = [f"SYM_{num:03d}" for num in [0, 19, 10, 8]]
+            if symbol not in allowed_symbols:
+                continue
             pending = PendingRequest(
                 unique_id=unique_id,
                 symbol=symbol,

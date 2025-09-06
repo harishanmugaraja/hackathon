@@ -5,8 +5,9 @@ Shows how to implement the BaseInferenceClient.
 """
 
 import sys
+import itertools
 from pathlib import Path
-
+from torch.utils import _pytree as pytree
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -61,10 +62,6 @@ class NnInferenceClient(BaseInferenceClient):
         nparams = sum(p.numel() for p in self.model.parameters())
         print(f"{nparams = }")
 
-        self.states = {
-            f"SYM_{num:03d}": self.model.init_state(1, self.device)
-            for num in range(self.num_symbols)
-        }
 
         weights_file = hf_hub_download(
             repo_id="jane-street-gpu-mode/hackathon",
@@ -76,6 +73,10 @@ class NnInferenceClient(BaseInferenceClient):
 
         self.model = torch.compile(self.model, disable=not compile, mode=compile_mode, fullgraph=True)
 
+        self.symbs = [f"SYM_{num:03d}" for num in [0, 19, 8, 10]]
+
+        self.state = self.model.init_state(len(self.symbs), device=self.device)
+
     def process_batch(
         self, requests_by_symbol: Dict[str, List[PendingRequest]]
     ) -> InferenceResponse:
@@ -83,29 +84,29 @@ class NnInferenceClient(BaseInferenceClient):
 
         start = time.time()
         with torch.inference_mode():
-            features_all = {
-                k: torch.tensor([i.features for i in v], device=self.device, dtype=torch.float32)
-                for k, v in requests_by_symbol.items()
-            }
-
-            for symbol, symbol_requests in requests_by_symbol.items():
-                state = self.states[symbol]
-                for req_i, req in enumerate(symbol_requests):
-                    features = features_all[symbol][None, req_i]
-
-                    pred, state = self.model(features, state)
-                    unique_ids.append(req.unique_id)
-                    preds.append(pred.to("cpu", non_blocking=True))
-
-                self.states[symbol] = state
-            torch.cuda.synchronize()
+            for t in itertools.count(0):
+                mask = [symb in requests_by_symbol and len(requests_by_symbol[symb]) > t for symb in self.symbs]
+                if not any(mask):
+                    break
+                features = torch.tensor([
+                    requests_by_symbol[symb][t].features if mask[i] else [0] * 79 for i, symb in enumerate(self.symbs)
+                ], device=self.device)
+                maskt = torch.tensor(mask, device=self.device)
+                pred, next_state = self.model(features, self.state)
+                self.state = pytree.tree_map(lambda x, y: torch.where(maskt.reshape((-1, *([1] * (x.ndim - 1)))), y, x), self.state, next_state)
+                for i, symb in enumerate(self.symbs):
+                    if mask[i]:
+                        unique_ids.append(requests_by_symbol[symb][t].unique_id)
+                        preds.append(pred[i].to("cpu", non_blocking=True))
+        torch.cuda.synchronize()
 
         preds = [i.squeeze(0).numpy().astype(float).tolist() for i in preds]
         end = time.time()
         elapsed = end - start
 
         # May not be a bad idea to print less often!
-        print(f"{len(preds) = }, {elapsed = }, {elapsed / len(preds) = }")
+        if len(preds) != 0:
+            print(f"{len(preds) = }, {elapsed = }, {elapsed / len(preds) = }")
 
         return InferenceResponse(
             unique_ids=unique_ids, predictions=preds, client_timestamp=time.time()
