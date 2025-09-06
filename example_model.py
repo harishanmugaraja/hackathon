@@ -72,7 +72,13 @@ class NnInferenceClient(BaseInferenceClient):
         weights = torch.load(weights_file, weights_only=True)
         self.model.load_state_dict(weights)
 
-        self.model = torch.compile(self.model, disable=not compile, mode=compile_mode, dynamic=dynamic, fullgraph=True)
+        self.model = torch.compile(
+            self.model,
+            disable=not compile,
+            mode=compile_mode,
+            dynamic=dynamic,
+            fullgraph=True,
+        )
 
         self.symbs = [f"SYM_{num:03d}" for num in [0, 19, 8, 10]]
 
@@ -85,23 +91,51 @@ class NnInferenceClient(BaseInferenceClient):
 
         start = time.time()
         with torch.inference_mode():
-            for t in itertools.count(0):
-                mask = [symb in requests_by_symbol and len(requests_by_symbol[symb]) > t for symb in self.symbs]
-                if not any(mask):
-                    break
-                features = torch.tensor([
-                    requests_by_symbol[symb][t].features if mask[i] else [0] * 79 for i, symb in enumerate(self.symbs)
-                ], device=self.device)
-                maskt = torch.tensor(mask, device=self.device)
-                pred, next_state = self.model(features, self.state)
-                self.state = pytree.tree_map(lambda x, y: torch.where(maskt.reshape((-1, *([1] * (x.ndim - 1)))), y, x), self.state, next_state)
-                for i, symb in enumerate(self.symbs):
-                    if mask[i]:
-                        unique_ids.append(requests_by_symbol[symb][t].unique_id)
-                        preds.append(pred[i].to("cpu", non_blocking=True))
+            requests_by_symbol = {k: requests_by_symbol.get(k, []) for k in self.symbs}
+            max_t = max(len(v) for v in requests_by_symbol.values())
+            if max_t == 0:
+                return InferenceResponse(
+            unique_ids=unique_ids, predictions=preds, client_timestamp=time.time()
+        )
+            mask = np.array(
+                [
+                    [len(requests_by_symbol[symb]) > t for symb in self.symbs]
+                    for t in range(max_t)
+                ]
+            )
+            features = torch.tensor(
+                [
+                    [
+                        requests_by_symbol[symb][t].features
+                        if mask[t, i]
+                        else [0.0] * 79
+                        for i, symb in enumerate(self.symbs)
+                    ]
+                    for t in range(max_t)
+                ], pin_memory=True
+            ).to(self.device, non_blocking=True)
+            outs = []
+            maskt = torch.tensor(mask, device=self.device)
+            for t in range(max_t):
+                pred, next_state = self.model(features[t], self.state)
+                self.state = pytree.tree_map(
+                    lambda x, y: torch.where(
+                        maskt[t].reshape((-1, *([1] * (x.ndim - 1)))), y, x
+                    ),
+                    self.state,
+                    next_state,
+                )
+                outs.append(pred)
+        
+        out = torch.stack(outs).cpu().numpy()
+        for t  in range(max_t):
+            for i, symb in enumerate(self.symbs):
+                if mask[t][i]:
+                    preds.append(out[t, i].astype(float).tolist())
+                    unique_ids.append(requests_by_symbol[symb][t].unique_id)
         torch.cuda.synchronize()
 
-        preds = [i.squeeze(0).numpy().astype(float).tolist() for i in preds]
+        # preds = [i.squeeze(0).numpy().astype(float).tolist() for i in preds]
         end = time.time()
         elapsed = end - start
 
