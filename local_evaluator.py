@@ -84,7 +84,7 @@ class LocalEvaluator:
             latencies.append(latency_ms)
 
         response_rate = len(predictions) / len(self.requests_df)
-        avg_latency = np.mean(latencies) if latencies else 0
+        avg_latency = np.median(latencies) if latencies else 0
 
         stats_dict = {
             "total_requests": len(self.requests_df),
