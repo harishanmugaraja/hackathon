@@ -24,7 +24,8 @@ from model.inference_model import MultiTowerModel, ModelConfig
 
 
 torch.set_float32_matmul_precision('high')
-compile = True
+compile = False
+dynamic = False
 # compile_mode = "max-autotune-no-cudagraphs"
 compile_mode = None
 
@@ -71,7 +72,7 @@ class NnInferenceClient(BaseInferenceClient):
         weights = torch.load(weights_file, weights_only=True)
         self.model.load_state_dict(weights)
 
-        self.model = torch.compile(self.model, disable=not compile, mode=compile_mode, fullgraph=True)
+        self.model = torch.compile(self.model, disable=not compile, mode=compile_mode, dynamic=dynamic, fullgraph=True)
 
         self.symbs = [f"SYM_{num:03d}" for num in [0, 19, 8, 10]]
 

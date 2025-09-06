@@ -169,11 +169,6 @@ class BaseInferenceClient(ABC):
                 received_time=time.time(),
             )
 
-            with self.queue_lock:
-                try:
-                    self.request_queues[symbol].put_nowait(pending)
-                except queue.Full:
-                    print(f"Queue full for symbol {symbol}, dropping request")
 
     def _handle_score(self, score: ScoreUpdate):
         """Handle score update from server."""
