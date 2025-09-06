@@ -23,7 +23,8 @@ from model.inference_model import MultiTowerModel, ModelConfig
 
 
 torch.set_float32_matmul_precision('high')
-compile = True
+compile = False
+dynamic = False
 # compile_mode = "max-autotune-no-cudagraphs"
 compile_mode = None
 
@@ -74,7 +75,7 @@ class NnInferenceClient(BaseInferenceClient):
         weights = torch.load(weights_file, weights_only=True)
         self.model.load_state_dict(weights)
 
-        self.model = torch.compile(self.model, disable=not compile, mode=compile_mode, fullgraph=True)
+        self.model = torch.compile(self.model, disable=not compile, mode=compile_mode, dynamic=dynamic, fullgraph=True)
 
     def process_batch(
         self, requests_by_symbol: Dict[str, List[PendingRequest]]
@@ -105,7 +106,7 @@ class NnInferenceClient(BaseInferenceClient):
         elapsed = end - start
 
         # May not be a bad idea to print less often!
-        print(f"{len(preds) = }, {elapsed = }, {elapsed / len(preds) = }")
+        # print(f"{len(preds) = }, {elapsed = }, {elapsed / len(preds) = }")
 
         return InferenceResponse(
             unique_ids=unique_ids, predictions=preds, client_timestamp=time.time()
