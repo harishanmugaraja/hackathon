@@ -21,10 +21,10 @@ from huggingface_hub import hf_hub_download
 
 from client import BaseInferenceClient, PendingRequest, InferenceResponse
 from model.inference_model import MultiTowerModel, ModelConfig
-
+from constants import SYMBOL_ALLOWLIST
 
 torch.set_float32_matmul_precision('high')
-compile = False
+compile = True
 dynamic = False
 # compile_mode = "max-autotune-no-cudagraphs"
 compile_mode = None
@@ -80,7 +80,7 @@ class NnInferenceClient(BaseInferenceClient):
             fullgraph=True,
         )
 
-        self.symbs = [f"SYM_{num:03d}" for num in [0, 19, 8, 10]]
+        self.symbs = SYMBOL_ALLOWLIST
 
         self.state = self.model.init_state(len(self.symbs), device=self.device)
 
@@ -140,8 +140,8 @@ class NnInferenceClient(BaseInferenceClient):
         elapsed = end - start
 
         # May not be a bad idea to print less often!
-        if len(preds) != 0:
-            print(f"{len(preds) = }, {elapsed = }, {elapsed / len(preds) = }")
+        # if len(preds) != 0:
+        #     print(f"{len(preds) = }, {elapsed = }, {elapsed / len(preds) = }")
 
         return InferenceResponse(
             unique_ids=unique_ids, predictions=preds, client_timestamp=time.time()
