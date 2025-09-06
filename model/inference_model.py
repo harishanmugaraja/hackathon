@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import dataclasses as dc
 from enum import Enum
 
 import torch
@@ -25,6 +26,7 @@ class ModelConfig:
     tower_depth: int
     num_heads: int
     num_features: int
+    good_towers: tuple[int,...] = dc.field(default_factory=lambda: (1, 2))
 
 
 def create_layer(layer_type: LayerType, hidden_size: int, num_heads: int = 8):
@@ -101,8 +103,9 @@ class Tower(nn.Module):
 
 
 class MultiTowerModel(nn.Module):
-    def __init__(self, config: ModelConfig, tower_config: list):
+    def __init__(self, config: ModelConfig):
         super().__init__()
+        self.config = config
 
         layer_types = [
             LayerType.XLSTM,
@@ -116,7 +119,10 @@ class MultiTowerModel(nn.Module):
         )
         self.output_proj = nn.Linear(config.hidden_size, 1)
 
-        self.tower_config = tower_config
+    @property
+    def good_towers(self):
+        return [self.towers[i] for i in self.config.good_towers]
+
 
     def forward(self, x: torch.Tensor, state):
         results = [
@@ -124,12 +130,29 @@ class MultiTowerModel(nn.Module):
             for state_idx, tower_idx in enumerate(self.tower_config)
         ]
         xs, new_state = zip(*results, strict=True)
-
-        xs = [self.output_proj(x) for x in xs]
-        ys = [torch.zeros_like(xs[0]) for _ in range(4)]
-        for idx, tower_idx in enumerate(self.tower_config):
-            ys[tower_idx] = xs[idx]
-        return torch.concat(ys, dim=1), list(new_state)
+        return list(xs), list(new_state)
 
     def init_state(self, batch_size, device):
-        return [self.towers[tower_idx].init_state(batch_size, device) for tower_idx in self.tower_config]
+        return [tower.init_state(batch_size, device) for tower in self.good_towers]
+
+class EdgeLordModel(nn.Module):
+    def __init__(self, inner):
+        super().__init__()
+        self.inner = inner
+        p = np.load('reg.npz')
+        w = p['weight']
+        b = p['bias']
+        lin = nn.Linear(in_features=w.shape[-1], out_features=w.shape[0])
+        lin.load_state_dict({
+            'weight': torch.tensor(w, dtype=torch.float32),
+            'bias': torch.tensor(b, dtype=torch.float32)
+        })
+        self.lin = lin
+
+    def forward(self, x: torch.Tensor, state):
+        x, state = self.inner(x, state)
+        x = torch.cat(x, axis=-1)
+        return self.lin(x), state
+
+    def init_state(self, batch_size, device):
+        return self.inner.init_state(batch_size, device)

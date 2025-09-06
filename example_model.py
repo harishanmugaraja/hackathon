@@ -20,7 +20,7 @@ import torch
 from huggingface_hub import hf_hub_download
 
 from client import BaseInferenceClient, PendingRequest, InferenceResponse
-from model.inference_model import MultiTowerModel, ModelConfig
+from model.inference_model import MultiTowerModel, ModelConfig, EdgeLordModel
 from constants import SYMBOL_ALLOWLIST
 
 torch.set_float32_matmul_precision('high')
@@ -58,13 +58,10 @@ class NnInferenceClient(BaseInferenceClient):
             num_heads=8,
             num_features=79,
         )
-        tower_config = [1, 2]
-        self.model = MultiTowerModel(config, tower_config).to(self.device)
+        
+        
 
-        nparams = sum(p.numel() for p in self.model.parameters())
-        print(f"{nparams = }")
-
-
+        self.model = MultiTowerModel(config)
         weights_file = hf_hub_download(
             repo_id="jane-street-gpu-mode/hackathon",
             filename="state_dict.pt",
@@ -72,6 +69,12 @@ class NnInferenceClient(BaseInferenceClient):
         )
         weights = torch.load(weights_file, weights_only=True)
         self.model.load_state_dict(weights)
+
+        self.model = EdgeLordModel(self.model).to(self.device)
+
+        nparams = sum(p.numel() for p in self.model.parameters())
+        print(f"{nparams = }")
+
 
         self.model = torch.compile(
             self.model,
