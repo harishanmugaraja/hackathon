@@ -2,6 +2,8 @@ from dataclasses import dataclass
 import dataclasses as dc
 from enum import Enum
 
+import numpy as np
+
 import torch
 import torch.nn as nn
 
@@ -126,10 +128,11 @@ class MultiTowerModel(nn.Module):
 
     def forward(self, x: torch.Tensor, state):
         results = [
-            self.towers[tower_idx](x, state[state_idx])
-            for state_idx, tower_idx in enumerate(self.tower_config)
+            tower(x, tower_state)
+            for tower_state, tower in zip(state, self.good_towers, strict=True)
         ]
         xs, new_state = zip(*results, strict=True)
+
         return list(xs), list(new_state)
 
     def init_state(self, batch_size, device):
